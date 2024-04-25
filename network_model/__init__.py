@@ -1,9 +1,12 @@
+import time
+
 import networkx as nx
 import json
-import matplotlib.pyplot as plt
-import scipy
 
-import incidents.csv_read
+import pandas as pd
+import geopandas
+
+
 from utilities import BiDict
 
 G = nx.DiGraph()
@@ -48,10 +51,25 @@ def get_routes(origin, destination):
         print("Error")
 
 
-print("Getting ready...")
-load_toc_file(open("toc-full.json"))
-print("Let's go!")
+print("Preparing network model...")
+tic = time.perf_counter()
+load_toc_file(open("input_files/toc_json/toc-full.json"))
+toc = time.perf_counter()
+print(f"Network graph inferred ({toc - tic:0.4f} seconds so far)")
 
+print("Populating geospatial data...")
+df = pd.read_csv("input_files/tiploc_spatial_data/tiploc.csv")
+gdf = geopandas.GeoDataFrame(df, geometry=geopandas.points_from_xy(df['EASTING'], df['NORTHING'], crs='epsg:27700')).to_crs("4326")
+
+for row in gdf.itertuples():
+    try:
+        G.nodes[row.TIPLOC]["latlong"] = (row.geometry.y, row.geometry.x)
+        G.nodes[row.TIPLOC]["name"] = row.NAME
+    except KeyError:
+        continue
+
+toc = time.perf_counter()
+print(f"Geospatial data processed (took {toc - tic:0.4f} seconds)")
 
 if __name__ == "__main__":
     get_routes("EXETRSD", "TIVIPW")
@@ -60,3 +78,4 @@ if __name__ == "__main__":
     #print((G.nodes["DIGBY"]).adjacents())
     print(G.nodes["EXETRSD"])
     print(G.nodes["EXETRSD"]["stanox"])
+    print(gdf[gdf["TIPLOC"] == "EXETRSD"]["geometry"].values[0].coords[:][0][::-1]) #EXETRSD lat/long

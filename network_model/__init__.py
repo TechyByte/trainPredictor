@@ -1,10 +1,11 @@
+import logging
 import time
 
 import networkx as nx
 import json
-
 import pandas as pd
 import geopandas
+import config
 
 
 from utilities import BiDict
@@ -15,6 +16,7 @@ tiploc_stanox = BiDict()
 
 
 def load_toc_file(f):
+    """Load and process a TOC JSON file to construct the graph and mapping."""
     for line in f:
         data = json.loads(line)
         try:
@@ -36,6 +38,7 @@ def load_toc_file(f):
     for k, v in tiploc_stanox.items():
         try:
             G.nodes[k]["stanox"] = v
+            G.nodes[k]["incidents"] = []
         except KeyError:
             continue
 
@@ -45,21 +48,22 @@ def get_routes(origin, destination):
     try:
         for path in nx.all_shortest_paths(G, origin, destination):
             paths.append(path)
-            print(path)
+            logging.debug(path)
         return paths
     except KeyError:
-        print("Error")
+        logging.error("Invalid station code.")
 
 
-print("Preparing network model...")
+logging.info("Preparing network model...")
 tic = time.perf_counter()
 load_toc_file(open("input_files/toc_json/toc-full.json"))
 toc = time.perf_counter()
-print(f"Network graph inferred ({toc - tic:0.4f} seconds so far)")
+logging.info(f"Network graph inferred (took {toc - tic:0.4f} seconds)")
 
-print("Populating geospatial data...")
+logging.info("Populating geospatial data...")
 df = pd.read_csv("input_files/tiploc_spatial_data/tiploc.csv")
 gdf = geopandas.GeoDataFrame(df, geometry=geopandas.points_from_xy(df['EASTING'], df['NORTHING'], crs='epsg:27700')).to_crs("4326")
+tic = time.perf_counter()
 
 for row in gdf.itertuples():
     try:
@@ -69,13 +73,13 @@ for row in gdf.itertuples():
         continue
 
 toc = time.perf_counter()
-print(f"Geospatial data processed (took {toc - tic:0.4f} seconds)")
+logging.info(f"Geospatial data processed (took {toc - tic:0.4f} seconds)")
+
+
 
 if __name__ == "__main__":
-    get_routes("EXETRSD", "TIVIPW")
-    get_routes("EXETRSD", "BHAMNWS")
-    get_routes("EXETRSD", "EXMOUTH")
     #print((G.nodes["DIGBY"]).adjacents())
-    print(G.nodes["EXETRSD"])
-    print(G.nodes["EXETRSD"]["stanox"])
-    print(gdf[gdf["TIPLOC"] == "EXETRSD"]["geometry"].values[0].coords[:][0][::-1]) #EXETRSD lat/long
+    #logging.info(G.nodes["EXETRSD"]) # should equal {'stanox': '83421', 'latlong': (50.72978236583622, -3.543543710734685), 'name': 'EXETER ST DAVIDS', 'weather_city_id': None}
+    #logging.info(G.nodes["EXETRSD"]["stanox"]) # should equal 83421
+    #logging.info(gdf[gdf["TIPLOC"] == "EXETRSD"]["geometry"].values[0].coords[:][0][::-1]) #EXETRSD lat/long
+    print(get_routes("EXETRSD", "EXMOUTH"))

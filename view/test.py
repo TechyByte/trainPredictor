@@ -65,7 +65,7 @@ for incident in incidents.df.itertuples():
 
 toc = time.perf_counter()
 logging.info(
-    f"{success} incidents processed out of {total} incidents ({success / total:0.4f}%) in {toc - tic:0.4f} seconds")
+    f"{success} incidents processed out of {total} incidents ({100 * success / total:0.4f}%) in {toc - tic:0.4f} seconds")
 
 
 weather_stations = WeatherStations()
@@ -90,9 +90,11 @@ for node in network_model.G.nodes():
 toc = time.perf_counter()
 logging.info(f"Collated incidents in {toc - tic:0.4f} seconds")
 
-logging.info("Saving network model to file")
-logging.info("Saving incident and weather data")
+logging.info("Saving populated network model to file")
 
+filename = "huge_raw_model.pkl"
 
-with open("raw_model.pkl", "wb") as file:
+with open(filename, "wb") as file:
     pickle.dump(network_model.G, file)
+
+logging.info("Network model successfully saved to file: {}".format(filename))

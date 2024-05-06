@@ -43,12 +43,28 @@ def load_toc_file(f):
             continue
 
 
+# Initialize the cache
+routes_cache = {}
+
+
 def get_routes(origin, destination):
+    # Create a key for the cache
+    cache_key = (origin, destination)
+
+    # Check if the result is in the cache
+    if cache_key in routes_cache:
+        return routes_cache[cache_key]
+
+    # If the result is not in the cache, compute the routes
     paths = []
     try:
         for path in nx.all_shortest_paths(G, origin, destination):
             paths.append(path)
             logging.debug(path)
+
+        # Store the result in the cache
+        routes_cache[cache_key] = paths
+
         return paths
     except KeyError:
         logging.error("Invalid station code.")

@@ -1,3 +1,5 @@
+import time
+
 import config
 
 import logging
@@ -48,10 +50,13 @@ logging.info(
 
 logging.info(f"Extracting training data from raw model...")
 
+tic = time.perf_counter()
+
 for node, data in raw_model.nodes(data=True):
     count += 1
     if count % int(total / 100) == 0:
-        logging.info(f"Processing nodes: {100 * count / total:0.4f}% ({count} of {total})")
+        toc = time.perf_counter()
+        logging.info(f"Processing nodes: {100 * count / total:0.4f}% ({count} of {total}) - estimated time remaining: {(toc-tic)*((total-count)/count)/60:0.4f} minutes")
 
     # If a specific node is provided and the current node is not the specified node, skip this iteration
     if node_to_learn is not None and node != node_to_learn:
@@ -137,10 +142,10 @@ model.add(Dropout(0.1))
 
 # model.add(Conv1D(filters=64, kernel_size=3, activation='relu'))
 model.add(LSTM(units=100, return_sequences=True,
-               activation='sigmoid'))
+               activation='tanh'))
 model.add(Dropout(0.1))
 # model.add(LSTM(units=50, return_sequences=False))
-model.add(Dense(units=64, activation='softmax'))
+model.add(Dense(units=32, activation='softmax'))
 model.add(Dense(units=1))
 
 # Compile the model
@@ -152,7 +157,7 @@ X_val = X_val.reshape((X_val.shape[0], X_val.shape[1], 1))
 
 logging.info("Training model...")
 # Train the model
-history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=8, batch_size=256)
+history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=8, batch_size=64)
 logging.info("Training complete")
 # Display the training loss and validation loss
 import matplotlib.pyplot as plt

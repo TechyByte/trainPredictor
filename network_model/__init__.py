@@ -1,4 +1,5 @@
 import logging
+import pickle
 import time
 
 import networkx as nx
@@ -88,10 +89,13 @@ for row in gdf.itertuples():
     except KeyError:
         continue
 
+
+
 toc = time.perf_counter()
 logging.info(f"Geospatial data processed (took {toc - tic:0.4f} seconds)")
 
-
+with open("bare_network_model.pkl", "wb") as file:
+    pickle.dump(G, file)
 
 if __name__ == "__main__":
     #print((G.nodes["DIGBY"]).adjacents())

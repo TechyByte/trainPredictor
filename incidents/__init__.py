@@ -63,8 +63,8 @@ for column in datetime_columns:
     df[column] = pd.to_datetime(df[column], format="%d-%b-%Y %H:%M", errors="ignore")
 
 # Replace [NON_]PFPI_MINUTES with max value where EVENT_TYPE indicates a cancellation, diversion or otherwise failed service
-# df.loc[(df["EVENT_TYPE"].isin(CANCELLED_EVENT_CODES)), "PFPI_MINUTES"] = max(df["PFPI_MINUTES"])
-# df.loc[(df["EVENT_TYPE"].isin(CANCELLED_EVENT_CODES)), "NON_PFPI_MINUTES"] = max(df["NON_PFPI_MINUTES"])
+df.loc[(df["EVENT_TYPE"].isin(CANCELLED_EVENT_CODES)), "PFPI_MINUTES"] = max(df["PFPI_MINUTES"])
+df.loc[(df["EVENT_TYPE"].isin(CANCELLED_EVENT_CODES)), "NON_PFPI_MINUTES"] = max(df["NON_PFPI_MINUTES"])
 
 toc = time.perf_counter()
 logging.info(f"Processing transparency reports... {toc - tic:0.4f} seconds so far")

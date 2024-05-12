@@ -1,91 +1,68 @@
+
 from tensorflow.keras.models import load_model
 import numpy as np
 import pandas as pd
-from datetime import datetime
-import network_model
-import logging
-from meteostat import Hourly
-from meteostat import Stations as WeatherStations  # avoiding ambiguity with [train] stations
-import config
-import requests
-import os
-# Load the saved model
-model = load_model('trained_model.h5')
-
-# Function to get current weather
-# This is a placeholder, replace it with your actual function
-def get_current_weather(tiploc):
-    node = network_model.G.nodes(data=True)[tiploc]
-    if "latlong" in node:
-        # Extract latitude and longitude from the node
-        latitude = node["latlong"][0]
-        longitude = node["latlong"][1]
-
-        # Parameters to include in the API call
-        params = {
-            "lat": latitude,
-            "lon": longitude,
-            "appid": config.openweather_API_key,
-            "units": "metric",
-            "exclude": "minutely,hourly,daily,alerts"
-            # Excluding data not needed for this function to save data and time
-        }
-
-        response = requests.get(config.openweather_base_URL, params=params)
-        print(response.request.url)
-        if response.status_code == 200:
-            data = response.json()
-            current = data['current']
-
-            temperature = current['temp']
-            dew_point = current['dew_point']
-            relative_humidity = current['humidity']
-            precipitation = current.get('rain', {}).get('1h', 0) if 'rain' in current else 0
-            snow = current.get('snow', {}).get('1h', 0) if 'snow' in current else 0
-            wind_direction = current['wind_deg']
-            wind_speed = current['wind_speed']
-            peak_wind_gust = current.get('wind_gust', 0)
-            pressure = current['pressure']
-            # OpenWeather does not provide direct sunlight duration in current data, so this is left as None
-            total_sun = None
-            cloud_cover = current['clouds']
-
-            return [
-                temperature, dew_point, relative_humidity,
-                precipitation, snow, wind_direction, wind_speed,
-                peak_wind_gust, pressure, cloud_cover
-            ]
-        else:
-            print("Failed to retrieve data")
-            print(response.text)
-            return [10,10,100,0,0,270,3,22,1018,4] # Placeholder data
-    else:
-        print("Latitude and longitude not found")
-        return None
-
-
-
-# Prepare the input data
-incident_datetime = pd.to_datetime(datetime.now()).value  # Replace with your actual incident time
-tiploc = "EXETRSD"  # Replace with your actual tiploc
-train_service_code = '25474001'  # Replace with your actual train service code
-
-# Get the current weather data
-current_weather = get_current_weather(tiploc)
-
+from datetime import date, datetime
 from sklearn.preprocessing import LabelEncoder
+
+import weather
+from weather import get_current_weather
+import schedule
+
+# Load the saved model
+model = load_model('trained_model_EXETRSD.h5')
+
+services = schedule.get_scheduled_services(date.today(), "EXETRSD")
+
+input_data = pd.DataFrame(columns=["tiploc", "time", "train_service_code", "weather"])
+count = 0
+
+for service in services:
+    count += 1
+    movements = service.get_movements()
+    for movement in movements:
+        train_service_code = service.tsc
+        try:
+            current_weather = get_current_weather(movement.tiploc)
+            new_row = pd.DataFrame({"tiploc": [movement.tiploc], "time": [date.today() + movement.time],
+                                    "train_service_code": [service.tsc], "weather": [current_weather]})
+            input_data = pd.concat([input_data, new_row], ignore_index=True)
+        except KeyError:
+            new_row = pd.DataFrame({"tiploc": [movement.tiploc], "time": [date.today() + movement.time],
+                                    "train_service_code": [service.tsc], "weather": [weather.placeholder_weather()]})
+            input_data = pd.concat([input_data, new_row], ignore_index=True)
+    if count > 5:
+        break
 
 # Initialize the LabelEncoder
 le = LabelEncoder()
 
-# Fit the LabelEncoder and transform the 'tiploc' and 'train_service_code' columns
-tiploc = le.fit_transform([tiploc])[0]
-train_service_code = le.fit_transform([train_service_code])[0]
 
-# Now you can prepare the input data
-input_data = np.array([[tiploc, incident_datetime, train_service_code] + current_weather])
+# Fit the LabelEncoder and transform the 'tiploc' and 'train_service_code' columns
+input_data["tiploc"] = le.fit_transform(input_data["tiploc"])
+#input_data["train_service_code"] = le.fit_transform(input_data["train_service_code"])
+
+
+# Convert the Unix timestamp to int64
+input_data['time'] = pd.to_datetime(input_data['time']).dt.tz_localize(None)
+for i in range(len(input_data)):
+    input_data.loc[i, 'time'] = input_data.loc[i, 'time'].timestamp()
+
+# Convert 'time' column to numeric format
+input_data['time'] = pd.to_datetime(input_data['time']).dt.tz_localize(None)
+input_data['time'] = input_data['time'].apply(lambda x: x.timestamp()).astype('float32')
+
+# Convert 'weather' column to float32
+#input_data['weather'] = input_data['weather'].apply(lambda x: [float(i) for i in x])
+
+# Now, you can convert these specific columns to float32 and create the input_data_array
+input_data_array = np.column_stack([input_data['tiploc'].values, input_data['time'].values, input_data['train_service_code'].values, input_data['weather'].values.tolist()]).astype('float32')
 
 # Make a prediction
-prediction = model.predict(input_data)
+prediction = model.predict(input_data_array)
 
-print(f'The predicted delay is: {prediction[0][0]}')
+
+
+print(prediction)
+assert len(input_data["time"]) == len(prediction)
+print(f'The predicted delay is {prediction[0][0][0]} minutes')

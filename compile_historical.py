@@ -85,6 +85,7 @@ logging.info("Weather data gathered")
 logging.info("Collating incidents within network nodes")
 tic = time.perf_counter()
 for node in network_model.G.nodes():
+    # Convert existing list of incidents to a single DataFrame
     network_model.G.nodes[node]["incidents"] = pd.DataFrame(network_model.G.nodes[node]["incidents"])
 
 toc = time.perf_counter()

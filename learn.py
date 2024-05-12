@@ -29,8 +29,6 @@ count = 0
 total = len(raw_model.nodes)
 success = 0
 
-
-
 # Create the parser
 parser = argparse.ArgumentParser(
     description='Perform learning on all nodes or a specific node. Leave blank to learn on all nodes or specify TIPLOC.')
@@ -56,7 +54,8 @@ for node, data in raw_model.nodes(data=True):
     count += 1
     if count % int(total / 100) == 0:
         toc = time.perf_counter()
-        logging.info(f"Processing nodes: {100 * count / total:0.4f}% ({count} of {total}) - estimated time remaining: {(toc-tic)*((total-count)/count)/60:0.4f} minutes")
+        logging.info(
+            f"Processing nodes: {100 * count / total:0.4f}% ({count} of {total}) - estimated time remaining: {(toc - tic) * ((total - count) / count) / 60:0.4f} minutes")
 
     # If a specific node is provided and the current node is not the specified node, skip this iteration
     if node_to_learn is not None and node != node_to_learn:
@@ -81,18 +80,29 @@ for node, data in raw_model.nodes(data=True):
                 closest_weather = weather_history.iloc[i].fillna(0).astype('int64')
 
                 # Combine the incident data and the corresponding weather data
-                combined_features = np.concatenate([[str(node), incident_datetime_int64],
-                                                    incident[['TRAIN_SERVICE_CODE']]
-                                                   .values, closest_weather.values.flatten()])
+                combined_features_actual = np.concatenate([[str(node), incident_datetime_int64],
+                                                           incident[['TRAIN_SERVICE_CODE']]
+                                                          .values, closest_weather.values.flatten()])
 
+                combined_plus_created_features = np.concatenate([[str(node), incident_datetime_int64 + 10],
+                                                                 [str(int(incident['TRAIN_SERVICE_CODE']) + 10)],
+                                                                 closest_weather.values.flatten()])
+
+                combined_minus_created_features = np.concatenate([[str(node), incident_datetime_int64 - 10],
+                                                                 [str(int(incident['TRAIN_SERVICE_CODE']) - 10)],
+                                                                 closest_weather.values.flatten()])
                 # Add the combined features to the list
-                features.append(combined_features)
+                features.append(combined_features_actual)
 
                 # Determine the label for the incident
                 label = max(incident['PFPI_MINUTES'], incident['NON_PFPI_MINUTES'])  # , incident['EVENT_TYPE'],
                 # incident['INCIDENT_REASON']
 
                 labels.append(label)
+                features.append(combined_plus_created_features)
+                features.append(combined_minus_created_features)
+                labels.append(0)
+                labels.append(0)
                 success += 1
             else:
                 logging.debug(f"No weather history data available for node {node}")
@@ -108,7 +118,7 @@ from sklearn.preprocessing import LabelEncoder
 # Initialize the LabelEncoder
 le = LabelEncoder()
 
-# Fit the LabelEncoder and transform the 'EXETRSD' column
+# Fit the LabelEncoder and transform the tiploc column
 features[:, 0] = le.fit_transform(features[:, 0])
 
 # Check if features is empty
@@ -134,16 +144,16 @@ logging.info("Complete")
 logging.info("Preparing to train...")
 # Define the model
 model = Sequential()
-model.add(Dense(units=128, activation='relu', input_shape=(X_train.shape[1],)))
+model.add(Dense(units=128, kernel_initializer='he_uniform', activation='relu', input_shape=(X_train.shape[1],)))
 model.add(Reshape((128, 1)))
 model.add(Conv1D(filters=128, kernel_size=9,
                  activation='sigmoid'))  # , input_shape=(X_train.shape[1], 1)))  # Increased number of filters
 model.add(Dropout(0.1))
 
 # model.add(Conv1D(filters=64, kernel_size=3, activation='relu'))
-model.add(LSTM(units=100, return_sequences=True,
+model.add(LSTM(units=96, return_sequences=True,
                activation='tanh'))
-model.add(Dropout(0.1))
+
 # model.add(LSTM(units=50, return_sequences=False))
 model.add(Dense(units=32, activation='softmax'))
 model.add(Dense(units=1))
@@ -159,6 +169,11 @@ logging.info("Training model...")
 # Train the model
 history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=8, batch_size=64)
 logging.info("Training complete")
+
+# Save the model
+model.save('trained_model_' + (node_to_learn if node_to_learn is not None else "whole") + '.h5')
+print("Model saved as trained_model_" + (node_to_learn if node_to_learn is not None else "whole") + '.h5')
+
 # Display the training loss and validation loss
 import matplotlib.pyplot as plt
 
@@ -187,10 +202,6 @@ print(f'Validation Loss: {val_loss}')
 predictions = model.predict(X_val)
 
 print(predictions)
-
-# Save the model
-model.save('trained_model_' + (node_to_learn if node_to_learn is not None else "whole") + '.h5')
-print("Model saved as trained_model_" + (node_to_learn if node_to_learn is not None else "whole") + '.h5')
 
 from sklearn.metrics import confusion_matrix
 

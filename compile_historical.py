@@ -10,6 +10,8 @@ from meteostat import Stations as WeatherStations  # avoiding ambiguity with [tr
 import incidents
 import network_model
 
+overall_tic = time.perf_counter()
+
 
 def get_valid_tiploc_from_stanox(stanox, stanox2=None):
     try:
@@ -50,16 +52,17 @@ for incident in incidents.df.itertuples():
             for path in paths:
                 for node in path:
                     network_model.G.nodes[node]["incidents"].append(incident)
+                break # Only add the incident to the first path found
             logging.debug("Successfully processed incident between " + incident_start_location
                           + " and " + incident_end_location)
             success += 1
         except networkx.exception.NodeNotFound:
             logging.error("One of the stations in the incident was not found in the network model.")
         except networkx.exception.NetworkXNoPath:
-            logging.error("No path found between the stations in the incident.")
+            logging.error(f"No path found between {incident_start_location} and {incident_end_location}")
     else:
-        logging.error(
-            "It was not possible to add incident " + str(incident.TRAIN_SERVICE_CODE) + " to the network model.")
+        logging.debug(
+            "It was not possible to add incident with TSC " + str(incident.TRAIN_SERVICE_CODE) + " to the network model")
         logging.debug("Incident start location: " + str(incident_start_location))
         logging.debug("Incident end location: " + str(incident_end_location))
 
@@ -74,11 +77,11 @@ for node in network_model.G.nodes:
     if "latlong" in network_model.G.nodes[node] and len(network_model.G.nodes[node]["incidents"]) > 0:
         relevant_weather_station = weather_stations.nearby(network_model.G.nodes[node]["latlong"][0],
                                                            network_model.G.nodes[node]["latlong"][1]).fetch(1)
-        logging.info("Obtaining weather history for " + network_model.G.nodes[node]["name"] + " from "
+        logging.debug("Obtaining weather history for " + network_model.G.nodes[node]["name"] + " from "
                      + relevant_weather_station["name"])
         network_model.G.nodes[node]["weather_history"] = Hourly(relevant_weather_station,
                                                                 start=incidents.get_earliest_incident(),
-                                                                end=incidents.get_latest_incident()).fetch()
+                                                                end=incidents.get_latest_incident()).fetch().drop("tsun", axis=1)
 
 logging.info("Weather data gathered")
 
@@ -98,4 +101,8 @@ filename = "huge_raw_model.pkl"
 with open(filename, "wb") as file:
     pickle.dump(network_model.G, file)
 
-logging.info("Network model successfully saved to file: {}".format(filename))
+logging.info(f"Network model successfully saved to file: {filename}")
+
+overall_toc = time.perf_counter()
+
+logging.info(f"Total compilation time: {(overall_toc - overall_tic)/60:0.2f} minutes")

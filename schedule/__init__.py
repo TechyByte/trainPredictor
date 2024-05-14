@@ -14,19 +14,41 @@ from schedule.scheduled_service import ScheduledService
 
 # TODO: Return the filtered scheduled services
 db = MySQLdb.connect(host=config.db_host, user=config.db_user, passwd=config.db_password, db=config.db_database)
+c = db.cursor()
 
-
-
-def get_scheduled_services(date, tiploc, origin=False, destination=False, train_service_code=None,
-                           also_passing_tiploc=None) -> [ScheduledService]:
-    c = db.cursor()
+def get_all_scheduled_services_on_date(date):
     services = []
-    two_letter_day = date.strftime("%A")[:2].lower()
+    two_letter_day = tld(date)
+    standard_initial_query = f"SELECT id, train_uid, train_identity, train_service_code, atoc_code FROM `schedule` WHERE `start_date` <= '{date}' AND `end_date` >= '{date}' AND `runs_{two_letter_day}` = 1;"
+    c.execute(standard_initial_query)
+    for row in c.fetchall():
+        # for each  service
+        service = ScheduledService(row[1], row[2], row[3], row[4])
+        location_query = f"SELECT tiploc_code, arrival, pass, departure FROM `location` WHERE id = {row[0]} ORDER BY `order` ASC;"
+        c.execute(location_query)
+        for location in c.fetchall():
+            if location[2] is None:
+                if location[1] is None:
+                    time = location[3]
+                else:
+                    time = location[1]
+            else:
+                time = location[2]
+            service.add_stop(location[0], time)
+        services.append(service)
+    return services
+
+
+def get_scheduled_services_on_date_through_tiploc(date, tiploc, origin=False, destination=False, train_service_code=None,
+                                                  also_passing_tiploc=None) -> [ScheduledService]:
+    services = []
+    two_letter_day = tld(date)
     if origin:
         origin_supp = " AND WHERE `order` = 1"
     else:
         origin_supp = ""
     if destination:
+        # TODO: below
         destination_supp = " AND WHERE `order` IN (SELECT `order` FROM `location` WHERE "
     else:
         destination_supp = ""
@@ -61,11 +83,15 @@ def get_scheduled_services(date, tiploc, origin=False, destination=False, train_
                 services.append(service)
         else:
             services.append(service)
-        past_nodes = []
     return services
 
+
+def tld(date):
+    return date.strftime("%A")[:2].lower()
+
+
 if __name__ == "__main__":
-    test = get_scheduled_services(datetime.date.today(), "EXETRSD", also_passing_tiploc="CWLYBDG")
+    test = get_scheduled_services_on_date_through_tiploc(datetime.date.today(), "EXETRSD", also_passing_tiploc="CWLYBDG")
     print(test)
     print(f"Services found: {len(test)}")
 

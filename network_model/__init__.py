@@ -8,7 +8,6 @@ import pandas as pd
 import geopandas
 import config
 
-
 from utilities import BiDict
 
 G = nx.DiGraph()
@@ -71,6 +70,35 @@ def get_routes(origin, destination):
         logging.error("Invalid station code.")
 
 
+def interpolate_latlong(default_position=(49, 1)):
+    fail_count = 0  # Count the number of nodes without latlong
+    defaulted = 0  # Count the number of nodes with default position
+    for node in G.nodes():
+        try:
+            G.nodes[node]["latlong"]
+            pass
+        except KeyError:
+            fail_count += 1
+            # Get the neighbors of the node
+            neighbours = nx.all_neighbors(G, node)
+
+            # Get the latlong of the neighbors
+            neighbour_positions = [G.nodes[neighbour]["latlong"] for neighbour in neighbours if
+                                   "latlong" in G.nodes[neighbour]]
+            # If there are neighbors with latlong, compute the average
+            if neighbour_positions:
+                avg_lat = sum(float(pos[0]) for pos in neighbour_positions) / len(neighbour_positions)
+                avg_long = sum(float(pos[1]) for pos in neighbour_positions) / len(neighbour_positions)
+                G.nodes[node]["latlong"] = (avg_lat, avg_long)
+            else:
+                # If there are no neighbors with latlong, assign a default position
+                G.nodes[node]["latlong"] = default_position
+                default_position = (default_position[0] + 0.1, default_position[1] + 0.1)
+                defaulted += 1
+
+    logging.info("Node location interpolation complete: " + str(fail_count) + " nodes without latlong, " + str(defaulted) + " nodes defaulted")
+
+
 logging.info("Preparing network model...")
 tic = time.perf_counter()
 load_toc_file(open("input_files/toc_json/toc-full.json"))
@@ -79,7 +107,9 @@ logging.info(f"Network graph inferred (took {toc - tic:0.4f} seconds)")
 
 logging.info("Populating geospatial data...")
 df = pd.read_csv("input_files/tiploc_spatial_data/tiploc.csv")
-gdf = geopandas.GeoDataFrame(df, geometry=geopandas.points_from_xy(df['EASTING'], df['NORTHING'], crs='epsg:27700')).to_crs("4326")
+gdf = geopandas.GeoDataFrame(df,
+                             geometry=geopandas.points_from_xy(df['EASTING'], df['NORTHING'], crs='epsg:27700')).to_crs(
+    "4326")
 tic = time.perf_counter()
 
 for row in gdf.itertuples():
@@ -89,7 +119,7 @@ for row in gdf.itertuples():
     except KeyError:
         continue
 
-
+interpolate_latlong()
 
 toc = time.perf_counter()
 logging.info(f"Geospatial data processed (took {toc - tic:0.4f} seconds)")
@@ -97,9 +127,11 @@ logging.info(f"Geospatial data processed (took {toc - tic:0.4f} seconds)")
 with open("bare_network_model.pkl", "wb") as file:
     pickle.dump(G, file)
 
+
+
 if __name__ == "__main__":
-    #print((G.nodes["DIGBY"]).adjacents())
-    #logging.info(G.nodes["EXETRSD"]) # should equal {'stanox': '83421', 'latlong': (50.72978236583622, -3.543543710734685), 'name': 'EXETER ST DAVIDS', 'weather_city_id': None}
-    #logging.info(G.nodes["EXETRSD"]["stanox"]) # should equal 83421
-    #logging.info(gdf[gdf["TIPLOC"] == "EXETRSD"]["geometry"].values[0].coords[:][0][::-1]) #EXETRSD lat/long
+    # print((G.nodes["DIGBY"]).adjacents())
+    # logging.info(G.nodes["EXETRSD"]) # should equal {'stanox': '83421', 'latlong': (50.72978236583622, -3.543543710734685), 'name': 'EXETER ST DAVIDS', 'weather_city_id': None}
+    # logging.info(G.nodes["EXETRSD"]["stanox"]) # should equal 83421
+    # logging.info(gdf[gdf["TIPLOC"] == "EXETRSD"]["geometry"].values[0].coords[:][0][::-1]) #EXETRSD lat/long
     print(get_routes("EXETRSD", "EXMOUTH"))

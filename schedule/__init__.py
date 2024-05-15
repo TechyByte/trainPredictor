@@ -3,6 +3,7 @@ import datetime
 import MySQLdb
 
 import config
+import network_model
 
 from schedule.scheduled_service import ScheduledService
 
@@ -46,6 +47,7 @@ def get_scheduled_services_on_date_through_tiploc(date, tiploc, origin=False, de
     if origin:
         origin_supp = " AND WHERE `order` = 1"
     else:
+        # TODO: fix below
         origin_supp = ""
     if destination:
         # TODO: below
@@ -95,3 +97,16 @@ if __name__ == "__main__":
     print(test)
     print(f"Services found: {len(test)}")
 
+
+def get_relevant_tiplocs_from_services(services):
+    relevant_tiplocs = []
+    for service in services:
+        movements = service.get_movements()
+        for movement in movements:
+            if movement.tiploc not in relevant_tiplocs:
+                relevant_tiplocs.append(movement.tiploc)
+                try:
+                    network_model.G.nodes(data=True)[movement.tiploc]['movements'] = []
+                except KeyError:
+                    pass
+    return relevant_tiplocs

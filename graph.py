@@ -7,34 +7,6 @@ import config
 
 import network_model as nm
 
-default_position = (49, 1)  # Define a default position
-fail_count = 0  # Count the number of nodes without latlong
-defaulted = 0  # Count the number of nodes with default position
-
-for node in nm.G.nodes():
-    try:
-        nm.G.nodes[node]["latlong"]
-        pass
-    except KeyError:
-        fail_count += 1
-        # Get the neighbors of the node
-        neighbours = networkx.all_neighbors(nm.G, node)
-
-        # Get the latlong of the neighbors
-        neighbour_positions = [nm.G.nodes[neighbour]["latlong"] for neighbour in neighbours if
-                               "latlong" in nm.G.nodes[neighbour]]
-        # If there are neighbors with latlong, compute the average
-        if neighbour_positions:
-            avg_lat = sum(float(pos[0]) for pos in neighbour_positions) / len(neighbour_positions)
-            avg_long = sum(float(pos[1]) for pos in neighbour_positions) / len(neighbour_positions)
-            nm.G.nodes[node]["latlong"] = (avg_lat, avg_long)
-        else:
-            # If there are no neighbors with latlong, assign a default position
-            nm.G.nodes[node]["latlong"] = default_position
-            default_position = (default_position[0] + 0.1, default_position[1] + 0.1)
-            defaulted += 1
-
-logging.info("Complete: " + str(fail_count) + " nodes without latlong, " + str(defaulted) + " nodes defaulted")
 
 
 def convert(latlong):
